@@ -1,0 +1,5 @@
+tox
+pytest
+trello
+pypandoc
+PyYAML
