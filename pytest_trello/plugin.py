@@ -110,6 +110,7 @@ class TrelloCard(object):
     @property
     def card(self):
         if self._card is None:
+            # FIXME - handle HTTPError (unauthorized)
             self._card = self.api.cards.get(self.hash)
         return self._card
 
@@ -120,6 +121,7 @@ class TrelloCard(object):
     @property
     def board(self):
         if self._board is None:
+            # FIXME - handle HTTPError (unauthorized)
             self._board = self.api.lists.get(self.card['idList'])['name']
         return self._board
 
@@ -161,7 +163,7 @@ class TrelloPytestPlugin(object):
 
     def pytest_collection_modifyitems(self, session, config, items):
         reporter = config.pluginmanager.getplugin("terminalreporter")
-        reporter.write("collecting trello markers ", bold=True)
+        reporter.write("collected", bold=True)
         for i, item in enumerate(filter(lambda i: i.get_marker("trello") is not None, items)):
             marker = item.get_marker('trello')
             cards = tuple(sorted(set(marker.args)))  # (O_O) for caching
@@ -170,4 +172,4 @@ class TrelloPytestPlugin(object):
                     reporter.write(".")
                     config.trello_cache[card] = TrelloCard(self.api, card)
             item.funcargs["cards"] = TrelloCardList(self.api, *[config.trello_cache[c] for c in cards], **marker.kwargs)
-        reporter.write(" {0} collected\n".format(len(config.trello_cache)), bold=True)
+        reporter.write(" {0} trello markers\n".format(len(config.trello_cache)), bold=True)
