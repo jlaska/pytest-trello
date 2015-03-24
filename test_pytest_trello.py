@@ -19,13 +19,15 @@ class PyTestOption(object):
     def args(self):
         args = list()
         if self.config.getoption('trello_api_key') is not None:
-            args.append("--trello-api-key=%s" % self.config.getoption('trello_api_key'))
+            args.append('--trello-api-key')
+            args.append(self.config.getoption('trello_api_key'))
         if self.config.getoption('trello_api_token') is not None:
-            args.append("--trello-api-token=%s" % self.config.getoption('trello_api_token'))
+            args.append('--trello-api-token')
+            args.append(self.config.getoption('trello_api_token'))
         for completed in self.config.getoption('trello_completed'):
-            args.append("--trello-completed=\"%s\"" % completed)
+            args.append('--trello-completed')
+            args.append('"%s"' % completed)
         return args
-        return ' '.join(args)
 
 
 @pytest.fixture()
