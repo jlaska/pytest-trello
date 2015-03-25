@@ -133,7 +133,7 @@ setup(
     },
     zip_safe=False,
     tests_requires=['tox', 'trello', 'pytest'],
-    install_requires=['trello', 'pytest'],
+    install_requires=['trello', 'pytest', 'PyYAML'],
     setup_requires=['flake8'],
     cmdclass={
         # 'test': ToxTest,
