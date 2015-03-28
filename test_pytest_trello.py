@@ -207,3 +207,23 @@ def test_skip_with_closed_card(testdir, option):
     result = testdir.runpytest(*option.args)
     assert result.ret == 1
     assert result.parseoutcomes()['failed'] == 1
+
+
+def test_collection_reporter(testdir, option):
+    '''Verifies trello marker collection'''
+
+    testdir.makepyfile("""
+        import pytest
+        @pytest.mark.trello(*%s)
+        def test_foo():
+            assert True
+
+        @pytest.mark.trello(*%s)
+        def test_bar():
+            assert False
+        """ % (CLOSED_CARDS, OPEN_CARDS))
+    result = testdir.runpytest(*option.args)
+    assert result.ret == 0
+    result.stdout.fnmatch_lines([
+        'collected %s trello markers' % (len(CLOSED_CARDS) + len(OPEN_CARDS)),
+    ])

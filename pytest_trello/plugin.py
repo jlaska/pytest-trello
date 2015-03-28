@@ -3,6 +3,7 @@ import logging
 import yaml
 import pytest
 import trello
+# from connection import Connection
 
 
 """
@@ -18,6 +19,7 @@ cards for skip/xfail handling.
 
 
 log = logging.getLogger(__name__)
+_card_cache = {}
 
 
 def pytest_addoption(parser):
@@ -84,10 +86,8 @@ def pytest_configure(config):
                 print(msg)
                 pytest.exit(msg)
 
+        # api = Connection(key=trello_api_key, token=trello_api_token)
         api = trello.TrelloApi(trello_api_key, trello_api_token)
-
-        # Create trello card cache
-        config.trello_cache = dict()
 
         # Register pytest plugin
         assert config.pluginmanager.register(
@@ -97,21 +97,21 @@ def pytest_configure(config):
 
 
 class TrelloCard(object):
-    def __init__(self, api, url, **kwargs):
+    def __init__(self, api, url):
         self.api = api
         self.url = url
         self._card = None
-        self._board = None
+        self._list = None
 
     @property
-    def hash(self):
+    def short_hash(self):
         return os.path.basename(self.url)
 
     @property
     def card(self):
         if self._card is None:
-            # FIXME - handle HTTPError (unauthorized)
-            self._card = self.api.cards.get(self.hash)
+            # TODO - handle HTTPError (unauthorized)
+            self._card = self.api.cards.get(self.short_hash)
         return self._card
 
     @property
@@ -119,22 +119,24 @@ class TrelloCard(object):
         return self.card['name']
 
     @property
-    def board(self):
-        if self._board is None:
-            # FIXME - handle HTTPError (unauthorized)
-            self._board = self.api.lists.get(self.card['idList'])['name']
-        return self._board
+    def list_name(self):
+        if self._list is None:
+            # TODO - handle HTTPError (unauthorized)
+            self._list = self.api.lists.get(self.card['idList'])
+        return self._list['name']
 
 
 class TrelloCardList(object):
-    def __init__(self, api, *args, **kwargs):
+    def __init__(self, api, *cards, **kwargs):
         self.api = api
-        self.cards = args
+        self.cards = cards
         self.xfail = kwargs.get('xfail', True) and not ('skip' in kwargs)
 
     def __iter__(self):
-        for c in self.cards:
-            yield c
+        for card in self.cards:
+            if card not in _card_cache:
+                _card_cache[card] = TrelloCard(self.api, card)
+            yield _card_cache[card]
 
 
 class TrelloPytestPlugin(object):
@@ -149,17 +151,18 @@ class TrelloPytestPlugin(object):
         incomplete_cards = []
         cards = item.funcargs["cards"]
         for card in cards:
-            if card.board not in self.completed_lists:
+            if card.list_name not in self.completed_lists:
                 incomplete_cards.append(card)
 
+        # item.get_marker('trello').kwargs
         if incomplete_cards:
             if cards.xfail:
                 item.add_marker(pytest.mark.xfail(
                     reason="Xfailing due to incomplete trello cards: \n{0}".format(
-                        "\n ".join(["{0} [{1}] {2}".format(card.url, card.board, card.name) for card in incomplete_cards]))))
+                        "\n ".join(["{0} [{1}] {2}".format(card.url, card.list_name, card.name) for card in incomplete_cards]))))
             else:
                 pytest.skip("Skipping due to incomplete trello cards:\n{0}".format(
-                    "\n ".join(["{0} [{1}] {2}".format(card.url, card.board, card.name) for card in incomplete_cards])))
+                    "\n ".join(["{0} [{1}] {2}".format(card.url, card.list_name, card.name) for card in incomplete_cards])))
 
     def pytest_collection_modifyitems(self, session, config, items):
         reporter = config.pluginmanager.getplugin("terminalreporter")
@@ -168,8 +171,7 @@ class TrelloPytestPlugin(object):
             marker = item.get_marker('trello')
             cards = tuple(sorted(set(marker.args)))  # (O_O) for caching
             for card in cards:
-                if card not in config.trello_cache:
-                    reporter.write(".")
-                    config.trello_cache[card] = TrelloCard(self.api, card)
-            item.funcargs["cards"] = TrelloCardList(self.api, *[config.trello_cache[c] for c in cards], **marker.kwargs)
-        reporter.write(" {0} trello markers\n".format(len(config.trello_cache)), bold=True)
+                if card not in _card_cache:
+                    _card_cache[card] = TrelloCard(self.api, card)
+            item.funcargs["cards"] = TrelloCardList(self.api, *cards, **marker.kwargs)
+        reporter.write(" {0} trello markers\n".format(len(_card_cache)), bold=True)
