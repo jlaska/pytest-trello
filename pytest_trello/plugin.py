@@ -48,8 +48,7 @@ def pytest_addoption(parser):
                     action='append',
                     dest='trello_completed',
                     metavar='TRELLO_COMPLETED',
-                    # FIXME - change to Done after mocking
-                    default=['Live (May 2014)'],
+                    default=['Done', 'Archived'],
                     help='Any cards in TRELLO_COMPLETED are considered complete (default: %default)')
 
 
