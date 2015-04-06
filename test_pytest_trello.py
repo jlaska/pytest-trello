@@ -339,3 +339,57 @@ def test_collection_reporter(testdir, option, monkeypatch_trello, capsys):
 
     stdout, stderr = capsys.readouterr()
     assert 'collected %s trello markers' % (len(CLOSED_CARDS) + len(OPEN_CARDS)) in stdout
+
+
+def test_param_trello_cfg(testdir, option, monkeypatch_trello, capsys):
+    '''Verifies --trello-cfg parameter'''
+
+    # Create config file for testing
+    contents = '''
+        key: ''
+        token: ''
+        completed_lists:
+            - 'FAKE'
+    '''
+    cfg_file = testdir.makefile('.yml', contents)
+
+    # Run without parameter (expect fail)
+    result = testdir.runpytest(*['--trello-cfg'])
+    assert result.ret == 2
+    result.stderr.fnmatch_lines([
+        'pytest.py: error: argument --trello-cfg: expected one argument',
+    ])
+
+    # Run with parameter (expect pass)
+    result = testdir.runpytest(*['--trello-cfg', str(cfg_file)])
+    assert result.ret == 0
+
+
+def test_param_trello_api_key(testdir, option, monkeypatch_trello, capsys):
+    '''Verifies --trello-api-key parameter'''
+
+    # Run without parameter (expect fail)
+    result = testdir.runpytest(*['--trello-api-key'])
+    assert result.ret == 2
+    result.stderr.fnmatch_lines([
+        'pytest.py: error: argument --trello-api-key: expected one argument',
+    ])
+
+    # Run with parameter (expect pass)
+    result = testdir.runpytest(*['--trello-api-key', 'asdf'])
+    assert result.ret == 0
+
+
+def test_param_trello_api_token(testdir, option, monkeypatch_trello, capsys):
+    '''Verifies --trello-api-token parameter'''
+
+    # Run without parameter (expect fail)
+    result = testdir.runpytest(*['--trello-api-token'])
+    assert result.ret == 2
+    result.stderr.fnmatch_lines([
+        'pytest.py: error: argument --trello-api-token: expected one argument',
+    ])
+
+    # Run with parameter (expect pass)
+    result = testdir.runpytest(*['--trello-api-token', 'asdf'])
+    assert result.ret == 0
