@@ -1,5 +1,9 @@
 ## Release History
 
+### 0.0.3 (2015-04-06)
+
+* Plugin will warn, but not fail when providing bogus --trello-cfg options
+
 ### 0.0.2 (2015-04-06)
 
 * New --trello-cfg YAML format
