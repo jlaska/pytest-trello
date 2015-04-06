@@ -20,6 +20,7 @@ cards for skip/xfail handling.
 
 log = logging.getLogger(__name__)
 _card_cache = {}
+DEFAULT_TRELLO_COMPLETED = ['Done', 'Archived']
 
 
 def pytest_addoption(parser):
@@ -48,8 +49,8 @@ def pytest_addoption(parser):
                     action='append',
                     dest='trello_completed',
                     metavar='TRELLO_COMPLETED',
-                    default=['Done', 'Archived'],
-                    help='Any cards in TRELLO_COMPLETED are considered complete (default: %default)')
+                    default=[],
+                    help='Any cards in TRELLO_COMPLETED are considered complete (default: %s)' % DEFAULT_TRELLO_COMPLETED)
 
 
 def pytest_configure(config):
@@ -64,33 +65,43 @@ def pytest_configure(config):
     trello_cfg_file = config.getoption('trello_cfg_file')
     trello_api_key = config.getoption('trello_api_key')
     trello_api_token = config.getoption('trello_api_token')
+    trello_completed = config.getoption('trello_completed')
 
-    # Verify a key and token were provided
+    # If not --help or --collectonly or --showfixtures ...
     if not (config.option.help or config.option.collectonly or config.option.showfixtures):
+        # Warn if file does not exist
+        if not os.path.isfile(trello_cfg_file):
+            errstr = "No trello configuration file found matching: %s" % trello_cfg_file
+            log.warning(errstr)
+
+        # Load configuration file ...
         if os.path.isfile(trello_cfg_file):
             trello_cfg = yaml.load(open(trello_cfg_file, 'r'))
-            # TODO - set the parser value here as well
+            try:
+                trello_cfg = trello_cfg.get('trello', {})
+            except AttributeError:
+                trello_cfg = {}
+                errstr = "No trello configuration found in file: %s" % trello_cfg_file
+                log.warning(errstr)
+
             if trello_api_key is None:
-                trello_api_key = trello_cfg.get('trello', {}).get('key', None)
+                trello_api_key = trello_cfg.get('key', None)
             if trello_api_token is None:
-                trello_api_token = trello_cfg.get('trello', {}).get('token', None)
+                trello_api_token = trello_cfg.get('token', None)
+            if trello_completed is None or trello_completed == []:
+                trello_completed = trello_cfg.get('completed', [])
 
-        if False:
-            if trello_api_key is None:  # or trello_api_key == '':
-                msg = "ERROR: Missing required parameter --trello-api-key"
-                print(msg)
-                pytest.exit(msg)
-            if trello_api_token is None:  # or trello_api_token == '':
-                msg = "ERROR: Missing required parameter --trello-api-token"
-                print(msg)
-                pytest.exit(msg)
-
+        # Initialize trello api connection
         api = trello.TrelloApi(trello_api_key, trello_api_token)
+
+        # If completed is still empty, load default ...
+        if trello_completed is None or trello_completed == []:
+            trello_completed = DEFAULT_TRELLO_COMPLETED
 
         # Register pytest plugin
         assert config.pluginmanager.register(
-            TrelloPytestPlugin(api, completed_lists=config.getvalue('trello_completed')),
-            "trello_helper"
+            TrelloPytestPlugin(api, completed_lists=trello_completed),
+            'trello_helper'
         )
 
 
