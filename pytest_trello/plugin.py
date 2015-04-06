@@ -3,7 +3,7 @@ import logging
 import yaml
 import pytest
 import trello
-# from connection import Connection
+import requests.exceptions
 
 
 """
@@ -71,9 +71,9 @@ def pytest_configure(config):
             trello_cfg = yaml.load(open(trello_cfg_file, 'r'))
             # TODO - set the parser value here as well
             if trello_api_key is None:
-                trello_api_key = trello_cfg.get('key', None)
+                trello_api_key = trello_cfg.get('trello', {}).get('key', None)
             if trello_api_token is None:
-                trello_api_token = trello_cfg.get('token', None)
+                trello_api_token = trello_cfg.get('trello', {}).get('token', None)
 
         if False:
             if trello_api_key is None:  # or trello_api_key == '':
@@ -85,7 +85,6 @@ def pytest_configure(config):
                 print(msg)
                 pytest.exit(msg)
 
-        # api = Connection(key=trello_api_key, token=trello_api_token)
         api = trello.TrelloApi(trello_api_key, trello_api_token)
 
         # Register pytest plugin
@@ -96,21 +95,22 @@ def pytest_configure(config):
 
 
 class TrelloCard(object):
+    '''Object representing a trello card.
+    '''
+
     def __init__(self, api, url):
         self.api = api
         self.url = url
         self._card = None
-        self._list = None
 
     @property
-    def short_hash(self):
+    def id(self):
         return os.path.basename(self.url)
 
     @property
     def card(self):
         if self._card is None:
-            # TODO - handle HTTPError (unauthorized)
-            self._card = self.api.cards.get(self.short_hash)
+            self._card = self.api.cards.get(self.id)
         return self._card
 
     @property
@@ -118,10 +118,27 @@ class TrelloCard(object):
         return self.card['name']
 
     @property
-    def list_name(self):
+    def idList(self):
+        return self.card['idList']
+
+    @property
+    def list(self):
+        return TrelloList(self.api, self.idList)
+
+
+class TrelloList(object):
+    '''Object representing a trello list.
+    '''
+
+    def __init__(self, api, id):
+        self.api = api
+        self.id = id
+        self._list = None
+
+    @property
+    def name(self):
         if self._list is None:
-            # TODO - handle HTTPError (unauthorized)
-            self._list = self.api.lists.get(self.card['idList'])
+            self._list = self.api.lists.get(self.id)
         return self._list['name']
 
 
@@ -150,18 +167,22 @@ class TrelloPytestPlugin(object):
         incomplete_cards = []
         cards = item.funcargs["cards"]
         for card in cards:
-            if card.list_name not in self.completed_lists:
-                incomplete_cards.append(card)
+            try:
+                if card.list.name not in self.completed_lists:
+                    incomplete_cards.append(card)
+            except requests.exceptions.HTTPError, e:
+                log.warning("Error accessing card:%s - %s" % (card.id, e))
+                continue
 
         # item.get_marker('trello').kwargs
         if incomplete_cards:
             if cards.xfail:
                 item.add_marker(pytest.mark.xfail(
                     reason="Xfailing due to incomplete trello cards: \n{0}".format(
-                        "\n ".join(["{0} [{1}] {2}".format(card.url, card.list_name, card.name) for card in incomplete_cards]))))
+                        "\n ".join(["{0} [{1}] {2}".format(card.url, card.list.name, card.name) for card in incomplete_cards]))))
             else:
                 pytest.skip("Skipping due to incomplete trello cards:\n{0}".format(
-                    "\n ".join(["{0} [{1}] {2}".format(card.url, card.list_name, card.name) for card in incomplete_cards])))
+                    "\n ".join(["{0} [{1}] {2}".format(card.url, card.list.name, card.name) for card in incomplete_cards])))
 
     def pytest_collection_modifyitems(self, session, config, items):
         reporter = config.pluginmanager.getplugin("terminalreporter")
