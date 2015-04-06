@@ -1,6 +1,8 @@
 tox
 pytest
 pytest-cov
+coverage
+coveralls
 trello
 pypandoc
 PyYAML
