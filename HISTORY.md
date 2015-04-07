@@ -1,5 +1,9 @@
 ## Release History
 
+### 0.0.4 (2015-04-07)
+
+* Fix an issue during egg_info when pandoc is not installed
+
 ### 0.0.3 (2015-04-06)
 
 * Plugin will warn, but not fail when providing bogus --trello-cfg options
