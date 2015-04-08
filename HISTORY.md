@@ -1,5 +1,9 @@
 ## Release History
 
+### 0.0.5 (2015-04-08)
+
+* Remove flake8 from setup_requires
+
 ### 0.0.4 (2015-04-07)
 
 * Fix an issue during egg_info when pandoc is not installed
