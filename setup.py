@@ -105,7 +105,7 @@ def long_description(*paths):
     # attempt md -> rst conversion
     try:
         for path in paths:
-            result += pypandoc.convert(
+            result += '\n' + pypandoc.convert(
                 path, 'rst', format='markdown'
             )
     except (OSError, IOError):
