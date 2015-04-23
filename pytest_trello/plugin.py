@@ -121,7 +121,11 @@ class TrelloCard(object):
     @property
     def card(self):
         if self._card is None:
-            self._card = self.api.cards.get(self.id)
+            try:
+                self._card = self.api.cards.get(self.id)
+            except ValueError, e:
+                log.warning("Failed to retrieve card:%s - %s" % (self.id, e))
+                pass
         return self._card
 
     @property
@@ -149,7 +153,11 @@ class TrelloList(object):
     @property
     def name(self):
         if self._list is None:
-            self._list = self.api.lists.get(self.id)
+            try:
+                self._list = self.api.lists.get(self.id)
+            except ValueError, e:
+                log.warning("Failed to retrieve list:%s - %s" % (self.id, e))
+                pass
         return self._list['name']
 
 
