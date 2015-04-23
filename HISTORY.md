@@ -1,5 +1,9 @@
 ## Release History
 
+### 0.0.6 (2015-04-23)
+
+* Protect against exceptions from the trello library
+
 ### 0.0.5 (2015-04-08)
 
 * Remove flake8 from setup_requires
