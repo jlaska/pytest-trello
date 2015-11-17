@@ -2,9 +2,22 @@ import os
 import logging
 import yaml
 import pytest
+import py
 import trello
 import requests.exceptions
+from _pytest.python import getlocation
+from _pytest.resultlog import generic_path
 
+try:
+    from logging import NullHandler
+except ImportError:
+    from logging import Handler
+    class NullHandler(Handler):
+        def emit(self, record):
+            pass
+
+log = logging.getLogger(__name__)
+log.addHandler(NullHandler())
 
 """
 pytest-trello
@@ -17,8 +30,6 @@ cards for skip/xfail handling.
 :license: MIT, see LICENSE for more details.
 """
 
-
-log = logging.getLogger(__name__)
 _card_cache = {}
 DEFAULT_TRELLO_COMPLETED = ['Done', 'Archived']
 
@@ -51,12 +62,18 @@ def pytest_addoption(parser):
                     metavar='TRELLO_COMPLETED',
                     default=[],
                     help='Any cards in TRELLO_COMPLETED are considered complete (default: %s)' % DEFAULT_TRELLO_COMPLETED)
+    group.addoption('--show-trello-cards',
+                    action='store_true',
+                    dest='show_trello_cards',
+                    default=False,
+                    help='Show a list of all trello card markers.')
 
 
 def pytest_configure(config):
     '''
     Validate --trello-* parameters.
     '''
+    log.debug("pytest_configure() called")
 
     # Add marker
     config.addinivalue_line("markers", """trello(*cards): Trello card integration""")
@@ -103,6 +120,42 @@ def pytest_configure(config):
             TrelloPytestPlugin(api, completed_lists=trello_completed),
             'trello_helper'
         )
+
+
+def pytest_cmdline_main(config):
+    '''Check show_fixture_duplicates option to show fixture duplicates.'''
+    log.debug("pytest_cmdline_main() called")
+    if config.option.show_trello_cards:
+        from _pytest.main import wrap_session
+        wrap_session(config, __show_trello_cards)
+        return 0
+
+
+def __show_trello_cards(config, session):
+    '''Generate a report that includes all linked trello cards, and their status.'''
+    session.perform_collect()
+    curdir = py.path.local()
+
+    trello_helper = config.pluginmanager.getplugin("trello_helper")
+
+    card_cache = dict()
+    for i, item in enumerate(filter(lambda i: i.get_marker("trello") is not None, session.items)):
+        cards = item.funcargs.get('cards', [])
+        for card in cards:
+            if card not in card_cache:
+                card_cache[card] = list()
+            card_cache[card].append(generic_path(item))
+
+    reporter = config.pluginmanager.getplugin("terminalreporter")
+    reporter.section("trello card report")
+    if card_cache:
+        for card, gpaths in card_cache.items():
+            reporter.write("{0} ".format(card.url), bold=True)
+            reporter.write_line("[{0}] {1}".format(card.list.name, card.name))
+            for gpath in gpaths:
+                reporter.write_line(" * %s" % gpath)
+    else:
+        reporter.write_line("No trello cards collected")
 
 
 class TrelloCard(object):
@@ -162,6 +215,7 @@ class TrelloList(object):
 
 
 class TrelloCardList(object):
+    '''Object representing a list of trello cards.'''
     def __init__(self, api, *cards, **kwargs):
         self.api = api
         self.cards = cards
@@ -176,10 +230,12 @@ class TrelloCardList(object):
 
 class TrelloPytestPlugin(object):
     def __init__(self, api, **kwargs):
+        log.debug("TrelloPytestPlugin initialized")
         self.api = api
         self.completed_lists = kwargs.get('completed_lists', [])
 
     def pytest_runtest_setup(self, item):
+        log.debug("pytest_runtest_setup() called")
         if 'trello' not in item.keywords:
             return
 
@@ -204,6 +260,7 @@ class TrelloPytestPlugin(object):
                     "\n ".join(["{0} [{1}] {2}".format(card.url, card.list.name, card.name) for card in incomplete_cards])))
 
     def pytest_collection_modifyitems(self, session, config, items):
+        log.debug("pytest_collection_modifyitems() called")
         reporter = config.pluginmanager.getplugin("terminalreporter")
         reporter.write("collected", bold=True)
         for i, item in enumerate(filter(lambda i: i.get_marker("trello") is not None, items)):

@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 import pytest
+import inspect
+import re
+
+from _pytest.main import EXIT_OK, EXIT_NOTESTSCOLLECTED
 
 
 pytest_plugins = 'pytester',
@@ -139,6 +143,7 @@ def test_plugin_help(testdir):
         '* --trello-api-key=TRELLO_API_KEY',
         '* --trello-api-token=TRELLO_API_TOKEN',
         '* --trello-completed=TRELLO_COMPLETED',
+        '* --show-trello-cards *',
     ])
 
 
@@ -156,7 +161,7 @@ def test_param_trello_cfg_with_no_such_file(testdir, option, monkeypatch_trello,
     '''Verifies pytest-trello ignores any bogus files passed to --trello-cfg'''
 
     result = testdir.runpytest(*['--trello-cfg', 'asdfasdf'])
-    assert result.ret == 5
+    assert result.ret == EXIT_NOTESTSCOLLECTED
 
     # FIXME - assert actual log.warning message
     # No trello configuration file found matching:
@@ -170,7 +175,7 @@ def test_param_trello_cfg_containing_no_data(testdir, option, monkeypatch_trello
 
     # Run with parameter (expect pass)
     result = testdir.runpytest(*['--trello-cfg', str(cfg_file)])
-    assert result.ret == 0
+    assert result.ret == EXIT_OK
 
     # FIXME - assert actual log.warning message
     # No trello configuration file found matching:
@@ -198,7 +203,7 @@ def test_param_trello_cfg(testdir, option, monkeypatch_trello, capsys):
             assert True
         """ % OPEN_CARDS[0]
     result = testdir.inline_runsource(src, *['--trello-cfg', str(cfg_file)])
-    assert result.ret == 0
+    assert result.ret == EXIT_OK
     assert_outcome(result, passed=1)
 
 
@@ -217,7 +222,7 @@ def test_param_trello_api_key_with_value(testdir, option, monkeypatch_trello, ca
     '''Verifies success when passing --trello-api-key an option'''
 
     result = testdir.runpytest(*['--trello-api-key', 'asdf'])
-    assert result.ret == 5
+    assert result.ret == EXIT_NOTESTSCOLLECTED
 
     # TODO - would be good to assert some output
 
@@ -235,7 +240,7 @@ def test_param_trello_api_token_with_value(testdir, option, monkeypatch_trello, 
     '''Verifies success when passing --trello-api-token an option'''
 
     result = testdir.runpytest(*['--trello-api-token', 'asdf'])
-    assert result.ret == 5
+    assert result.ret == EXIT_NOTESTSCOLLECTED
 
     # TODO - would be good to assert some output
 
@@ -249,7 +254,7 @@ def test_pass_without_trello_card(testdir, option):
             assert True
         """)
     result = testdir.runpytest(*option.args)
-    assert result.ret == 0
+    assert result.ret == EXIT_OK
     assert result.parseoutcomes()['passed'] == 1
 
 
@@ -276,7 +281,7 @@ def test_success_with_open_card(testdir, option, monkeypatch_trello):
             assert True
         """ % OPEN_CARDS[0]
     # result = testdir.runpytest(*option.args)
-    # assert result.ret == 0
+    # assert result.ret == EXIT_OK
     # assert result.parseoutcomes()['xpassed'] == 1
     result = testdir.inline_runsource(src, *option.args)
     assert_outcome(result, xpassed=1)
@@ -293,7 +298,7 @@ def test_success_with_open_cards(testdir, option, monkeypatch_trello):
         """ % OPEN_CARDS
     # testdir.makepyfile(src)
     # result = testdir.runpytest(*option.args)
-    # assert result.ret == 0
+    # assert result.ret == EXIT_OK
     # assert result.parseoutcomes()['xpassed'] == 1
     result = testdir.inline_runsource(src, *option.args)
     assert_outcome(result, xpassed=1)
@@ -310,7 +315,7 @@ def test_failure_with_open_card(testdir, option, monkeypatch_trello):
         """ % OPEN_CARDS[0]
     # testdir.makepyfile(src)
     # result = testdir.runpytest(*option.args)
-    # assert result.ret == 0
+    # assert result.ret == EXIT_OK
     # assert result.parseoutcomes()['xfailed'] == 1
     result = testdir.inline_runsource(src, *option.args)
     assert_outcome(result, xfailed=1)
@@ -327,7 +332,7 @@ def test_failure_with_open_cards(testdir, option, monkeypatch_trello):
         """ % OPEN_CARDS
     # testdir.makepyfile(src)
     # result = testdir.runpytest(*option.args)
-    # assert result.ret == 0
+    # assert result.ret == EXIT_OK
     # assert result.parseoutcomes()['xfailed'] == 1
     result = testdir.inline_runsource(src, *option.args)
     assert_outcome(result, xfailed=1)
@@ -378,7 +383,7 @@ def test_failure_with_open_and_closed_cards(testdir, option, monkeypatch_trello)
         """ % ALL_CARDS
     # testdir.makepyfile(src)
     # result = testdir.runpytest(*option.args)
-    # assert result.ret == 0
+    # assert result.ret == EXIT_OK
     # assert result.parseoutcomes()['xfailed'] == 1
     result = testdir.inline_runsource(src, *option.args)
     assert_outcome(result, xfailed=1)
@@ -395,7 +400,7 @@ def test_skip_with_open_card(testdir, option, monkeypatch_trello):
         """ % OPEN_CARDS[0]
     # testdir.makepyfile(src)
     # result = testdir.runpytest(*option.args)
-    # assert result.ret == 0
+    # assert result.ret == EXIT_OK
     # assert result.parseoutcomes()['skipped'] == 1
     result = testdir.inline_runsource(src, *option.args)
     assert_outcome(result, skipped=1)
@@ -437,3 +442,75 @@ def test_collection_reporter(testdir, option, monkeypatch_trello, capsys):
 
     stdout, stderr = capsys.readouterr()
     assert 'collected %s trello markers' % (len(CLOSED_CARDS) + len(OPEN_CARDS)) in stdout
+
+
+def test_show_trello_report_with_no_cards(testdir, option, monkeypatch_trello, capsys):
+    '''Verifies when a test succeeds with an open trello card'''
+
+    src = """
+        import pytest
+        def test_func():
+            assert True
+        """
+
+    # Run pytest
+    args = option.args + ['--show-trello-cards',]
+    result = testdir.inline_runsource(src, *args)
+
+    # Assert exit code
+    assert result.ret == EXIT_OK
+
+    # Assert no tests ran
+    assert_outcome(result)
+
+    # Assert expected trello card report output
+    stdout, stderr = capsys.readouterr()
+    assert '= trello card report =' in stdout
+    assert 'No trello cards collected' in stdout
+
+
+def test_show_trello_report_with_cards(testdir, option, monkeypatch_trello, capsys):
+    '''Verifies when a test succeeds with an open trello card'''
+
+    # Used for later introspection
+    cls = 'Test_Foo'
+    module = inspect.stack()[0][3]
+    method = 'test_func'
+
+    src = """
+        import pytest
+        class Test_Class():
+            @pytest.mark.trello(*%s)
+            def test_method():
+                assert True
+
+        @pytest.mark.trello(*%s)
+        def test_func():
+            assert True
+        """ % (CLOSED_CARDS, OPEN_CARDS)
+
+    # Run pytest
+    args = option.args + ['--show-trello-cards',]
+    result = testdir.inline_runsource(src, *args)
+
+    # Assert exit code
+    assert result.ret == EXIT_OK
+
+    # Assert no tests ran
+    assert_outcome(result)
+
+    # Assert expected trello card report output
+    stdout, stderr = capsys.readouterr()
+
+    # Assert expected banner
+    assert re.search(r'^={1,} trello card report ={1,}', stdout, re.MULTILINE)
+
+    # Assert expected cards in output
+    for card in CLOSED_CARDS:
+        assert re.search(r'^%s \[Done\]' % card, stdout, re.MULTILINE)
+    for card in OPEN_CARDS:
+        assert re.search(r'^%s \[Not Done\]' % card, stdout, re.MULTILINE)
+
+    # this is weird, oh well
+    assert ' * {0}0/{0}.py:Test_Class().test_method'.format(module) in stdout
+    assert ' * {0}0/{0}.py:test_func'.format(module) in stdout
