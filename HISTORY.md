@@ -2,7 +2,7 @@
 
 ### 0.0.7 (2015-11-20)
 
-* Add support for --show-trello-report to display currently configured trello markers
+* Add support for --show-trello-cards to display currently configured trello markers
 
 ### 0.0.6 (2015-04-23)
 
